@@ -122,20 +122,22 @@ keys reach the lock. Then unlock with the real one.
 
 ## If a lock gets stuck
 
-- **Unlock with SIGUSR1**, from any shell in the session (SSH, another
-  device):
+- **Unlock with SIGUSR1**, from any shell running as your user. Over SSH from
+  another machine that is one line, and it needs no Wayland variables:
 
   ```bash
-  pkill -USR1 -x swaylock-plugin
+  ssh you@this-machine pkill -USR1 -x swaylock-plugin
   ```
 
 - **Never SIGTERM or SIGKILL the locker.** labwc keeps the session locked when
   the lock client dies without unlocking, by design, and you are left with a
   black screen. Starting a new `swaylock` takes over that lock, but restarting
   labwc is the only other way out, and it closes every window.
-- **Have a way in that does not need the keyboard at the machine** (SSH)
-  before you experiment. Ctrl+Alt+Fx to a text console may not work: it did
-  not during the lockout that led to `lock-test`.
+- **Set up SSH before you experiment**, so the way in does not need the
+  keyboard at the machine. Key-only is enough for this (`PasswordAuthentication
+  no`), and an `authorized_keys` line can be limited to one source machine with
+  `from="<address>"`. Ctrl+Alt+Fx to a text console may not work: it did not
+  during the lockout that led to `lock-test`.
 - **Check the keyboard itself.** That lockout was most likely a compact
   keyboard frozen by Fn-layer chords (trying Ctrl+Alt+Del on a 65% board), not
   the lock: every later test took the password fine.
