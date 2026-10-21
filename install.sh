@@ -93,5 +93,29 @@ else
     echo "    no <keyboard> section in $RCXML; add the keybind by hand (README, Corner gesture)"
 fi
 
+echo "==> labwc keybind: Win+L locks with the rain"
+LOCKCMD="$HOME/.local/bin/matrix-lock"
+if [ ! -f "$RCXML" ] || ! grep -q '</keyboard>' "$RCXML"; then
+    echo "    no <keyboard> section in $RCXML; add the keybind by hand (README, Lock now)"
+elif grep -qF "command=\"$LOCKCMD\"" "$RCXML"; then
+    echo "    already there"
+else
+    backup "$RCXML"
+    # Repoint an existing W-l bind (LXQt ships it as lxqt-leave --lockscreen,
+    # which locks nothing under labwc); add one if there is none.
+    awk -v cmd="$LOCKCMD" '
+        /<keybind key="W-l">/ { inwl = 1; found = 1 }
+        inwl && /command="/ { sub(/command="[^"]*"/, "command=\"" cmd "\"") }
+        inwl && /<\/keybind>/ { inwl = 0 }
+        !found && !added && /<\/keyboard>/ {
+            print "    <keybind key=\"W-l\">"
+            print "      <action name=\"Execute\" command=\"" cmd "\" />"
+            print "    </keybind>"
+            added = 1
+        }
+        { print }' "$RCXML" > "$RCXML.new" && mv "$RCXML.new" "$RCXML"
+    [ -n "${WAYLAND_DISPLAY:-}" ] && labwc --reconfigure 2>/dev/null || true
+fi
+
 [ -d "$BACKUP" ] && echo "Backups in $BACKUP"
 echo "Done. Test with 'lock-test matrix 90' before logging out and in again (README, Test safely)."

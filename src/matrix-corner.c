@@ -1,5 +1,7 @@
 /* matrix-corner: arm the bottom-right screen corner for a few seconds; the
- * pointer touching it runs matrix-lock (no grace). labwc starts it from a
+ * pointer touching it runs matrix-lock with the same 60 s grace as the idle
+ * lock. The flick itself does not dismiss it: swaylock-plugin measures motion
+ * from where the pointer enters, and the corner cannot be pushed past. labwc starts it from a
  * Right Ctrl keybind. It cannot see the key being released without taking
  * the keyboard from the focused window, so it simply expires.
  *
@@ -135,7 +137,7 @@ int main(void) {
     if (access(path, F_OK) == 0)
         execlp("notify-send", "notify-send", "-t", "3000", "matrix-corner", "Corner hit (dry run, no lock)", (char *)NULL);
     snprintf(path, sizeof path, "%s/.local/bin/matrix-lock", home);
-    execl(path, path, (char *)NULL);
+    execl(path, path, "--grace", "60", (char *)NULL);
     perror("matrix-corner: exec");
     return 1;
 }

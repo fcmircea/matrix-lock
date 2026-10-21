@@ -16,20 +16,22 @@ The idle clock counts from the last key press or mouse move.
 
 | Idle | What happens |
 |---|---|
-| 4:30 | Notification "Locking in 30 s"; any input cancels |
 | 5:00 | Rain lock. For 60 s a key press or a real mouse move dismisses it without a password |
 | 6:00 on | Password needed. Typing shows the ring over the rain; Enter unlocks |
 | 25:00 | Monitor off (`wlopm`); any input turns it back on |
 
-`loginctl lock-session`, any suspend and the corner gesture lock
-immediately, with no grace. An app that inhibits idle (a video playing) holds
-the whole timeline off.
+There is no warning before the lock. Win+L, `loginctl lock-session` and any
+suspend lock immediately, with no grace. An app that inhibits idle (a video
+playing, Claude desktop's "Keep computer awake while Claude works") holds the
+whole timeline off.
 
 **Corner gesture.** Press Right Ctrl, then within 2 s push the pointer into
 the bottom-right corner of the screen. Holding Ctrl while you flick works too;
 the key only arms the corner, so Right Ctrl shortcuts in apps are unaffected.
 A pointer already parked in the corner when you press the key does not count:
-it has to arrive.
+it has to arrive. The lock has the same 60 s grace as the idle one; pushing
+into the corner does not dismiss it, since swaylock-plugin counts motion from
+where the pointer enters and the corner cannot be pushed past.
 
 ## What's in it
 
@@ -37,12 +39,12 @@ it has to arrive.
 |---|---|
 | `bin/matrix-lock` | Starts swaylock-plugin with neo in a foot window as the background; extra flags pass through (`--grace 60`) |
 | `bin/lock-test` | Test harness: arms automatic unlock timers, then locks, waits, and reports how it ended and what PAM logged |
-| `src/matrix-corner.c` | The corner gesture: a 4 px invisible zone in the bottom-right corner, live for 2 s after Right Ctrl; touching it runs `matrix-lock` |
+| `src/matrix-corner.c` | The corner gesture: a 4 px invisible zone in the bottom-right corner, live for 2 s after Right Ctrl; touching it runs `matrix-lock --grace 60` |
 | `src/idle-watch.c` | Diagnostic: shows when the compositor considers you idle, counts down to the lock, and says when an app's idle inhibitor is holding it off |
 | `src/wlr-layer-shell-unstable-v1.xml` | Wayland protocol the zone is drawn with (from wlr-protocols, its own permissive license) |
 | `config/swayidle/config` | The timeline above |
 | `config/matrix-lock/foot.ini` | foot profile for the rain only: 3x glyphs, pure black. Normal foot windows are unaffected |
-| `install.sh` | Copies the above into `$HOME`, builds `matrix-corner` and `idle-watch`, adds swayidle to labwc autostart and the Right Ctrl keybind to `rc.xml`, backing up whatever it replaces |
+| `install.sh` | Copies the above into `$HOME`, builds `matrix-corner` and `idle-watch`, adds swayidle to labwc autostart, and the Right Ctrl and Win+L keybinds to `rc.xml`, backing up whatever it replaces |
 
 ## Build
 
@@ -147,7 +149,7 @@ keys reach the lock. Then unlock with the real one.
 Run `idle-watch` in a terminal and walk away. It asks labwc for two 5 s idle
 timers: the normal one, which is swayidle's view and stops while any app holds
 an idle inhibitor, and an input-only one, which counts keys and mouse alone.
-When the normal one fires it notifies you and counts down to the lock; the log
+When the normal one fires it counts down to the lock in the terminal; the log
 it leaves says what happened:
 
 | Log line | Meaning |
@@ -195,7 +197,8 @@ idle-watch
 ## Uninstall
 
 Remove the swayidle lines from `~/.config/labwc/autostart` and the
-`Control_R` keybind marked `matrix-lock` from `~/.config/labwc/rc.xml`, then
+`Control_R` keybind marked `matrix-lock` from `~/.config/labwc/rc.xml`, point
+the `W-l` keybind there back at your own locker, then
 `pkill swayidle` and `labwc --reconfigure`, and delete
 `~/.local/bin/matrix-lock`, `~/.local/bin/matrix-corner`, `~/.local/bin/idle-watch`,
 `~/.local/bin/lock-test`, `~/.config/swayidle/config` and

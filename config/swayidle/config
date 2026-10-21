@@ -1,5 +1,4 @@
 # Timeouts count from the last input, not from each other.
-timeout 270 'notify-send -t 30000 "Locking in 30 s" "Move the mouse or press a key to cancel."'
 timeout 300 '$HOME/.local/bin/matrix-lock --grace 60'
 timeout 1500 'wlopm --off \*' resume 'wlopm --on \*'
 before-sleep '$HOME/.local/bin/matrix-lock'

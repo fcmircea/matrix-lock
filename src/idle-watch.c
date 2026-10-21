@@ -6,7 +6,8 @@
  *   normal      what swayidle sees; an app's idle inhibitor holds it off
  *   input-only  counts keyboard and mouse only, ignores inhibitors
  * Neither firing means input keeps arriving; only input-only firing means an
- * app is inhibiting idle. The lock time is read from ~/.config/swayidle/config. */
+ * app is inhibiting idle. The lock time is read from ~/.config/swayidle/config.
+ * Everything goes to the terminal; it shows no desktop notifications. */
 #define _GNU_SOURCE
 #include <poll.h>
 #include <stdio.h>
@@ -22,7 +23,7 @@ static int threshold = 5, lock_at = 300;
 static int normal_idle, input_idle;
 static long idle_since;   /* when the normal timer fired, minus the threshold */
 static long input_since;  /* when the input-only timer fired */
-static int warned_inhibit, notify_id;
+static int warned_inhibit;
 
 static long now_s(void) {
     struct timespec t;
@@ -36,20 +37,6 @@ static void say(const char *what) {
     strftime(b, sizeof b, "%T", localtime(&t));
     printf("\r\033[K%s  %s\n", b, what);
     fflush(stdout);
-}
-
-/* Show or update the one notification this program owns. */
-static void notify(const char *body) {
-    char cmd[256];
-    if (notify_id)
-        snprintf(cmd, sizeof cmd, "notify-send -r %d -t 20000 'idle-watch' '%s'", notify_id, body);
-    else
-        snprintf(cmd, sizeof cmd, "notify-send -p -t 20000 'idle-watch' '%s'", body);
-    FILE *p = popen(cmd, "r");
-    if (!p) return;
-    int id;
-    if (!notify_id && fscanf(p, "%d", &id) == 1) notify_id = id;
-    pclose(p);
 }
 
 static int locked(void) {
@@ -68,8 +55,6 @@ static void idled(void *data, struct ext_idle_notification_v1 *n) {
     idle_since = now_s() - threshold;
     snprintf(msg, sizeof msg, "idle    (normal: swayidle's clock runs; lock in %d s)", lock_at - threshold);
     say(msg);
-    snprintf(msg, sizeof msg, "Idle. Rain lock in %d:%02d", (lock_at - threshold) / 60, (lock_at - threshold) % 60);
-    notify(msg);
 }
 
 static void resumed(void *data, struct ext_idle_notification_v1 *n) {
@@ -83,7 +68,6 @@ static void resumed(void *data, struct ext_idle_notification_v1 *n) {
     if (input_idle) return;  /* no input: an inhibitor stopped the clock, and the INHIBITED line says so */
     snprintf(msg, sizeof msg, "active  (input after %ld s idle)", now_s() - idle_since);
     say(msg);
-    if (notify_id) notify("Active again; idle clock reset");
 }
 
 static const struct ext_idle_notification_v1_listener listener = { idled, resumed };
@@ -145,7 +129,6 @@ int main(int argc, char **argv) {
         /* Input stopped but the normal clock does not run: something inhibits idle. */
         if (input_idle && !normal_idle && !warned_inhibit && now_s() - input_since >= 2) {
             say("INHIBITED  no input, but an app holds an idle inhibitor (video, keep-awake); swayidle's clock is stopped");
-            notify("No input, but an app is inhibiting idle: the lock will not come");
             warned_inhibit = 1;
         }
 
@@ -159,10 +142,6 @@ int main(int argc, char **argv) {
             if (left >= 0) printf("\r\033[K  lock in %ld:%02ld", left / 60, left % 60);
             else printf("\r\033[K  lock overdue by %ld s (is swayidle running?)", -left);
             fflush(stdout);
-            if (left > 0 && left % 30 == 0) {
-                snprintf(msg, sizeof msg, "Idle. Rain lock in %ld:%02ld", left / 60, left % 60);
-                notify(msg);
-            }
         }
     }
 }
