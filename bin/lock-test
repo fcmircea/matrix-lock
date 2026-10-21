@@ -1,10 +1,12 @@
 #!/bin/sh
 # Test a screen lock with an automatic unlock; swayidle never calls this.
-# Usage: lock-test selftest|swaylock|plain|matrix [seconds] [locker flags]
+# Usage: lock-test selftest|swaylock|plain|matrix|corner [seconds] [locker flags]
 #   selftest  arms a 5 s timer that only writes a marker, no lock
 #   swaylock  stock swaylock, blue
 #   plain     swaylock-plugin, black, no rain
 #   matrix    the real matrix-lock
+#   corner    arms the timers, then waits 30 s for you to lock with the
+#             Right Ctrl + bottom-right corner gesture
 # The unlock is SIGUSR1 from a systemd user timer, so it fires without the
 # keyboard and without the shell that started it; a second timer is the backstop.
 set -eu
@@ -20,7 +22,11 @@ case $stage in
   swaylock) name=swaylock; set -- /usr/bin/swaylock -f -c 1e3a5f "$@" ;;
   plain)    name=swaylock-plugin; set -- /usr/local/bin/swaylock-plugin -f -c 000000 "$@" ;;
   matrix)   name=swaylock-plugin; set -- "$HOME/.local/bin/matrix-lock" "$@" ;;
-  *) echo "usage: lock-test selftest|swaylock|plain|matrix [seconds] [locker flags]" >&2; exit 2 ;;
+  corner)   name=swaylock-plugin
+            if [ -e "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/matrix-corner.dry-run" ]; then
+              echo "matrix-corner.dry-run is set, the gesture would not lock; remove it first" >&2; exit 1
+            fi ;;
+  *) echo "usage: lock-test selftest|swaylock|plain|matrix|corner [seconds] [locker flags]" >&2; exit 2 ;;
 esac
 
 if [ "$stage" = selftest ]; then
@@ -45,7 +51,15 @@ done
 echo "timers armed: unlock at ${secs}s, backstop at $((secs + 60))s"
 
 start=$(date '+%Y-%m-%d %H:%M:%S')
-"$@"
+if [ "$stage" = corner ]; then
+  echo "now press Right Ctrl and touch the bottom-right corner (30 s)"
+  waited=0
+  while ! pgrep -x "$name" >/dev/null && [ "$waited" -lt 30 ]; do
+    sleep 1; waited=$((waited + 1))
+  done
+else
+  "$@"
+fi
 sleep 2
 if ! pgrep -x "$name" >/dev/null; then
   echo "locker did not start"

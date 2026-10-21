@@ -21,8 +21,15 @@ The idle clock counts from the last key press or mouse move.
 | 6:00 on | Password needed. Typing shows the ring over the rain; Enter unlocks |
 | 25:00 | Monitor off (`wlopm`); any input turns it back on |
 
-`loginctl lock-session` and any suspend lock immediately, with no grace.
-An app that inhibits idle (a video playing) holds the whole timeline off.
+`loginctl lock-session`, any suspend and the corner gesture lock
+immediately, with no grace. An app that inhibits idle (a video playing) holds
+the whole timeline off.
+
+**Corner gesture.** Press Right Ctrl, then within 2 s push the pointer into
+the bottom-right corner of the screen. Holding Ctrl while you flick works too;
+the key only arms the corner, so Right Ctrl shortcuts in apps are unaffected.
+A pointer already parked in the corner when you press the key does not count:
+it has to arrive.
 
 ## What's in it
 
@@ -30,9 +37,12 @@ An app that inhibits idle (a video playing) holds the whole timeline off.
 |---|---|
 | `bin/matrix-lock` | Starts swaylock-plugin with neo in a foot window as the background; extra flags pass through (`--grace 60`) |
 | `bin/lock-test` | Test harness: arms automatic unlock timers, then locks, waits, and reports how it ended and what PAM logged |
+| `src/matrix-corner.c` | The corner gesture: a 4 px invisible zone in the bottom-right corner, live for 2 s after Right Ctrl; touching it runs `matrix-lock` |
+| `src/idle-watch.c` | Diagnostic: shows when the compositor considers you idle, counts down to the lock, and says when an app's idle inhibitor is holding it off |
+| `src/wlr-layer-shell-unstable-v1.xml` | Wayland protocol the zone is drawn with (from wlr-protocols, its own permissive license) |
 | `config/swayidle/config` | The timeline above |
 | `config/matrix-lock/foot.ini` | foot profile for the rain only: 3x glyphs, pure black. Normal foot windows are unaffected |
-| `install.sh` | Copies the above into `$HOME` and adds swayidle to labwc autostart, backing up whatever it replaces |
+| `install.sh` | Copies the above into `$HOME`, builds `matrix-corner` and `idle-watch`, adds swayidle to labwc autostart and the Right Ctrl keybind to `rc.xml`, backing up whatever it replaces |
 
 ## Build
 
@@ -116,9 +126,39 @@ lock-test matrix 90
 lock-test matrix 300 --grace 60
 ```
 
+```bash
+lock-test corner 90
+```
+
+`corner` arms the timers, then waits 30 s for you to lock with the gesture.
+To try the gesture without locking at all, create the dry-run file; a hit then
+shows a notification instead. Delete it afterwards, or the gesture stays inert:
+
+```bash
+touch "$XDG_RUNTIME_DIR/matrix-corner.dry-run"
+```
+
 In each, type a wrong password and Enter first: a
 `pam_unix(...:auth): authentication failure` line in the report proves your
 keys reach the lock. Then unlock with the real one.
+
+## If the idle lock never comes
+
+Run `idle-watch` in a terminal and walk away. It asks labwc for two 5 s idle
+timers: the normal one, which is swayidle's view and stops while any app holds
+an idle inhibitor, and an input-only one, which counts keys and mouse alone.
+When the normal one fires it notifies you and counts down to the lock; the log
+it leaves says what happened:
+
+| Log line | Meaning |
+|---|---|
+| `idle (normal)` then a countdown | swayidle's clock is running; the lock comes at 0 |
+| `INHIBITED` | No input, but an app (a video, an app keeping the computer awake) stops the clock |
+| nothing at all | Input never stops: a device is sending events by itself |
+
+```bash
+idle-watch
+```
 
 ## If a lock gets stuck
 
@@ -154,8 +194,10 @@ keys reach the lock. Then unlock with the real one.
 
 ## Uninstall
 
-Remove the swayidle lines from `~/.config/labwc/autostart`, then
-`pkill swayidle`, and delete `~/.local/bin/matrix-lock`,
+Remove the swayidle lines from `~/.config/labwc/autostart` and the
+`Control_R` keybind marked `matrix-lock` from `~/.config/labwc/rc.xml`, then
+`pkill swayidle` and `labwc --reconfigure`, and delete
+`~/.local/bin/matrix-lock`, `~/.local/bin/matrix-corner`, `~/.local/bin/idle-watch`,
 `~/.local/bin/lock-test`, `~/.config/swayidle/config` and
 `~/.config/matrix-lock/`.
 
