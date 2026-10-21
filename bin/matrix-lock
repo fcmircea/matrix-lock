@@ -1,0 +1,7 @@
+#!/bin/sh
+# Lock the session with swaylock-plugin, neo's katakana rain as the background.
+# Extra arguments pass through to swaylock-plugin (the idle timeout adds --grace 60).
+# Absolute paths: swayidle started from labwc autostart may not have ~/.local/bin in PATH.
+pgrep -x swaylock-plugin >/dev/null && exit 0
+exec /usr/local/bin/swaylock-plugin -f -c 000000 "$@" \
+  --command-each "$HOME/.local/bin/windowtolayer --dummy-seat -- foot -c $HOME/.config/matrix-lock/foot.ini $HOME/.local/bin/neo -a --charset=katakana"

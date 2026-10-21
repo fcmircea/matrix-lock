@@ -1,0 +1,75 @@
+#!/bin/sh
+# Test a screen lock with an automatic unlock; swayidle never calls this.
+# Usage: lock-test selftest|swaylock|plain|matrix [seconds] [locker flags]
+#   selftest  arms a 5 s timer that only writes a marker, no lock
+#   swaylock  stock swaylock, blue
+#   plain     swaylock-plugin, black, no rain
+#   matrix    the real matrix-lock
+# The unlock is SIGUSR1 from a systemd user timer, so it fires without the
+# keyboard and without the shell that started it; a second timer is the backstop.
+set -eu
+stage=${1:-}
+secs=${2:-90}
+# Anything after the seconds passes through to the locker, e.g. --grace 60.
+if [ $# -ge 2 ]; then shift 2; else shift $#; fi
+marker=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lock-test.marker
+rm -f "$marker"
+
+case $stage in
+  selftest) name= ;;
+  swaylock) name=swaylock; set -- /usr/bin/swaylock -f -c 1e3a5f "$@" ;;
+  plain)    name=swaylock-plugin; set -- /usr/local/bin/swaylock-plugin -f -c 000000 "$@" ;;
+  matrix)   name=swaylock-plugin; set -- "$HOME/.local/bin/matrix-lock" "$@" ;;
+  *) echo "usage: lock-test selftest|swaylock|plain|matrix [seconds] [locker flags]" >&2; exit 2 ;;
+esac
+
+if [ "$stage" = selftest ]; then
+  systemd-run --user --quiet --collect --on-active=5s --timer-property=AccuracySec=1s \
+    /bin/sh -c "echo fired > '$marker'"
+  sleep 8
+  if [ -f "$marker" ]; then echo "selftest: timer fired"; else echo "selftest: timer did NOT fire"; exit 1; fi
+  exit 0
+fi
+
+if pgrep -x swaylock >/dev/null || pgrep -x swaylock-plugin >/dev/null; then
+  echo "a locker is already running; not starting another" >&2
+  exit 1
+fi
+
+# Arm both timers first; set -e aborts before locking if either fails.
+for t in "$secs" "$((secs + 60))"; do
+  systemd-run --user --quiet --collect --unit="lock-test-$$-$t" --on-active="${t}s" \
+    --timer-property=AccuracySec=1s \
+    /bin/sh -c "pkill -USR1 -x $name && echo 'timer ${t}s' >> '$marker'"
+done
+echo "timers armed: unlock at ${secs}s, backstop at $((secs + 60))s"
+
+start=$(date '+%Y-%m-%d %H:%M:%S')
+"$@"
+sleep 2
+if ! pgrep -x "$name" >/dev/null; then
+  echo "locker did not start"
+fi
+
+# Wait for the unlock, by password or by timer.
+waited=0
+while pgrep -x "$name" >/dev/null && [ "$waited" -lt $((secs + 90)) ]; do
+  sleep 1; waited=$((waited + 1))
+done
+
+echo "--- result"
+if pgrep -x "$name" >/dev/null; then
+  echo "STILL LOCKED after $((secs + 90))s"
+else
+  # Unlocked: cancel whatever timers have not fired, so none hits a later test.
+  systemctl --user stop "lock-test-$$-$secs.timer" "lock-test-$$-$((secs + 60)).timer" 2>/dev/null || true
+fi
+if pgrep -x "$name" >/dev/null; then
+  :
+elif [ -f "$marker" ]; then
+  echo "unlocked by: $(head -1 "$marker")"
+else
+  echo "unlocked by: password or grace dismissal (before the timer)"
+fi
+echo "--- auth log since $start"
+journalctl --since "$start" --no-pager -o short-iso 2>/dev/null | grep -iE 'swaylock|pam_unix' || echo "(no auth lines)"
