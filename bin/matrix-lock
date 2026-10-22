@@ -3,5 +3,11 @@
 # Extra arguments pass through to swaylock-plugin (the idle timeout adds --grace 60).
 # Absolute paths: swayidle started from labwc autostart may not have ~/.local/bin in PATH.
 pgrep -x swaylock-plugin >/dev/null && exit 0
+# swaylock-plugin's password checker keeps the stdio it was started with, even
+# after -f detaches the rest. Started by lxqt-leave, that is a pipe which closes
+# when lxqt-leave exits; the checker's next write (a wrong password) dies of
+# SIGPIPE and the locker exits still locked: a black screen. Off a terminal,
+# hand it /dev/null instead.
+[ -t 2 ] || exec </dev/null >/dev/null 2>&1
 exec /usr/local/bin/swaylock-plugin -f -c 000000 "$@" \
   --command-each "$HOME/.local/bin/windowtolayer --dummy-seat -- foot -c $HOME/.config/matrix-lock/foot.ini $HOME/.local/bin/neo -a --charset=katakana"

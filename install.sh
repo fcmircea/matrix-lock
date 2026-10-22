@@ -117,5 +117,35 @@ else
     [ -n "${WAYLAND_DISPLAY:-}" ] && labwc --reconfigure 2>/dev/null || true
 fi
 
+echo "==> LXQt leave dialog: Lock screen locks with the rain"
+# lxqt-leave runs lock_command_wayland, empty by default, split without a
+# shell: the path must be absolute. LXQT_SESSION_CONFIG=session, so
+# session.conf [General] is the file and group that win.
+SESSIONCONF="$HOME/.config/lxqt/session.conf"
+# No grace, like Win+L: the click is deliberate, and the hand still moving
+# after it would dismiss a grace lock at once.
+LXQTLOCK="lock_command_wayland=$LOCKCMD"
+if [ -f "$SESSIONCONF" ] && grep -qxF "$LXQTLOCK" "$SESSIONCONF"; then
+    echo "    already there"
+else
+    backup "$SESSIONCONF"
+    mkdir -p "$(dirname "$SESSIONCONF")"
+    touch "$SESSIONCONF"
+    # Drop any old value in [General] and put ours right under the header,
+    # or add a [General] section on top if there is none.
+    awk -v kv="$LXQTLOCK" '
+        /^\[/ { ingen = ($0 == "[General]") }
+        ingen && /^lock_command_wayland=/ { next }
+        { print }
+        $0 == "[General]" && !seen { print kv; seen = 1 }
+        END { if (!seen) exit 3 }' "$SESSIONCONF" > "$SESSIONCONF.new" && st=0 || st=$?
+    if [ "$st" = 3 ]; then
+        { printf '[General]\n%s\n\n' "$LXQTLOCK"; cat "$SESSIONCONF"; } > "$SESSIONCONF.new"
+    elif [ "$st" != 0 ]; then
+        rm -f "$SESSIONCONF.new"; exit "$st"
+    fi
+    mv "$SESSIONCONF.new" "$SESSIONCONF"
+fi
+
 [ -d "$BACKUP" ] && echo "Backups in $BACKUP"
 echo "Done. Test with 'lock-test matrix 90' before logging out and in again (README, Test safely)."

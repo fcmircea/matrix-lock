@@ -1,12 +1,13 @@
 #!/bin/sh
 # Test a screen lock with an automatic unlock; swayidle never calls this.
-# Usage: lock-test selftest|swaylock|plain|matrix|corner [seconds] [locker flags]
+# Usage: lock-test selftest|swaylock|plain|matrix|corner|button [seconds] [locker flags]
 #   selftest  arms a 5 s timer that only writes a marker, no lock
 #   swaylock  stock swaylock, blue
 #   plain     swaylock-plugin, black, no rain
 #   matrix    the real matrix-lock
 #   corner    arms the timers, then waits 30 s for you to lock with the
 #             Right Ctrl + bottom-right corner gesture
+#   button    the same wait, for the Lock screen button of the LXQt leave dialog
 # The unlock is SIGUSR1 from a systemd user timer, so it fires without the
 # keyboard and without the shell that started it; a second timer is the backstop.
 set -eu
@@ -26,7 +27,8 @@ case $stage in
             if [ -e "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/matrix-corner.dry-run" ]; then
               echo "matrix-corner.dry-run is set, the gesture would not lock; remove it first" >&2; exit 1
             fi ;;
-  *) echo "usage: lock-test selftest|swaylock|plain|matrix|corner [seconds] [locker flags]" >&2; exit 2 ;;
+  button)   name=swaylock-plugin ;;
+  *) echo "usage: lock-test selftest|swaylock|plain|matrix|corner|button [seconds] [locker flags]" >&2; exit 2 ;;
 esac
 
 if [ "$stage" = selftest ]; then
@@ -51,18 +53,29 @@ done
 echo "timers armed: unlock at ${secs}s, backstop at $((secs + 60))s"
 
 start=$(date '+%Y-%m-%d %H:%M:%S')
-if [ "$stage" = corner ]; then
-  echo "now press Right Ctrl and touch the bottom-right corner (30 s)"
+if [ "$stage" = corner ] || [ "$stage" = button ]; then
+  if [ "$stage" = corner ]; then
+    echo "now press Right Ctrl and touch the bottom-right corner (30 s)"
+  else
+    echo "now open the leave dialog and click Lock screen (30 s)"
+  fi
   waited=0
-  while ! pgrep -x "$name" >/dev/null && [ "$waited" -lt 30 ]; do
-    sleep 1; waited=$((waited + 1))
+  # Poll at 0.2 s so a lock that dies at once is still seen.
+  while ! pgrep -x "$name" >/dev/null && [ "$waited" -lt 150 ]; do
+    sleep 0.2; waited=$((waited + 1))
   done
+  seen=$(pgrep -x "$name" >/dev/null && echo 1 || echo 0)
 else
   "$@"
+  seen=0
 fi
 sleep 2
 if ! pgrep -x "$name" >/dev/null; then
-  echo "locker did not start"
+  if [ "$seen" = 1 ]; then
+    echo "locker started and was gone within 2 s (a grace dismissal, or it died)"
+  else
+    echo "locker did not start"
+  fi
 fi
 
 # Wait for the unlock, by password or by timer.

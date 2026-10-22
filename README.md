@@ -33,6 +33,15 @@ it has to arrive. The lock has the same 60 s grace as the idle one; pushing
 into the corner does not dismiss it, since swaylock-plugin counts motion from
 where the pointer enters and the corner cannot be pushed past.
 
+**Lock screen button.** The Lock screen button of LXQt's leave dialog
+(Logout, Shutdown, Suspend...) starts the rain with no grace, like Win+L: the
+mouse still moving after the click would dismiss a grace lock at once. Out of
+the box it locks nothing under labwc: it runs `lock_command_wayland`, which
+LXQt leaves empty. `lxqt-leave` stays running as a single instance and reads
+the command only when it starts, so after changing it, end any running
+`lxqt-leave` (it ignores SIGTERM while stuck on an empty command; use
+`pkill -KILL -x lxqt-leave`).
+
 ## What's in it
 
 | Path | What it is |
@@ -44,7 +53,7 @@ where the pointer enters and the corner cannot be pushed past.
 | `src/wlr-layer-shell-unstable-v1.xml` | Wayland protocol the zone is drawn with (from wlr-protocols, its own permissive license) |
 | `config/swayidle/config` | The timeline above |
 | `config/matrix-lock/foot.ini` | foot profile for the rain only: 3x glyphs, pure black. Normal foot windows are unaffected |
-| `install.sh` | Copies the above into `$HOME`, builds `matrix-corner` and `idle-watch`, adds swayidle to labwc autostart, and the Right Ctrl and Win+L keybinds to `rc.xml`, backing up whatever it replaces |
+| `install.sh` | Copies the above into `$HOME`, builds `matrix-corner` and `idle-watch`, adds swayidle to labwc autostart, the Right Ctrl and Win+L keybinds to `rc.xml`, and the leave dialog's lock command to `~/.config/lxqt/session.conf`, backing up whatever it replaces |
 
 ## Build
 
@@ -132,7 +141,12 @@ lock-test matrix 300 --grace 60
 lock-test corner 90
 ```
 
-`corner` arms the timers, then waits 30 s for you to lock with the gesture.
+```bash
+lock-test button 90
+```
+
+`corner` arms the timers, then waits 30 s for you to lock with the gesture;
+`button` does the same for the leave dialog's Lock screen button.
 To try the gesture without locking at all, create the dry-run file; a hit then
 shows a notification instead. Delete it afterwards, or the gesture stays inert:
 
@@ -191,6 +205,14 @@ idle-watch
   creates the output the plugin draws on and appears to restart it; this is
   not verified. If the rain ever fails, you get a black lock that unlocks
   normally.
+- swaylock-plugin's password checker keeps the stdout and stderr it was
+  started with, even after `-f` detaches the rest. If that is a pipe that
+  closes (as with `lxqt-leave`, which exits once the lock is up), the first
+  wrong password kills the checker and the locker exits still locked: a black
+  screen. `matrix-lock` therefore points its output at `/dev/null` whenever
+  stderr is not a terminal. If it ever happens anyway, `lock-test swaylock 20`
+  takes over the dead lock and releases it; the SIGUSR1 timers cannot, as
+  there is no locker left to signal.
 - swaylock-plugin with no `--command-each` falls back to `swaybg`; without it
   installed you get plain black (that is what `lock-test plain` shows).
 
@@ -198,7 +220,8 @@ idle-watch
 
 Remove the swayidle lines from `~/.config/labwc/autostart` and the
 `Control_R` keybind marked `matrix-lock` from `~/.config/labwc/rc.xml`, point
-the `W-l` keybind there back at your own locker, then
+the `W-l` keybind there back at your own locker, delete the
+`lock_command_wayland` line from `~/.config/lxqt/session.conf`, then
 `pkill swayidle` and `labwc --reconfigure`, and delete
 `~/.local/bin/matrix-lock`, `~/.local/bin/matrix-corner`, `~/.local/bin/idle-watch`,
 `~/.local/bin/lock-test`, `~/.config/swayidle/config` and
